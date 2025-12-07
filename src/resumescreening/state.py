@@ -75,7 +75,7 @@ class State(TypedDict):
         job_id (str): Unique identifier for the job opening.
         job_description (str): Description of the job role.
         resumes (list[str]): List of candidate resume file paths or identifiers.
-        screening_result (list[ScreeningResult]): Results from resume screening.
+        screening_results (list[ScreeningResult]): Results from resume screening.
         interviews (List[CandidateInterview]):
             Interview progress for all candidates.
         hr_report (str): Final or intermediate HR summary report.
@@ -83,6 +83,6 @@ class State(TypedDict):
     job_id: str
     job_description: str
     resumes: list[str]
-    screening_result: list[ScreeningResult]
+    screening_results: list[ScreeningResult]
     interviews: List[CandidateInterview]
     hr_report: str
