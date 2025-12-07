@@ -27,6 +27,7 @@ def parse_resume(text: str) -> dict:
         dict: Extracted profile information including skills, experience,
             and a summary.
     """
+    # todo: Replace this with an llm call with structure output
     return {
         "skills": ["python", "fastapi", "docker"],
         "years_experience": 4,
@@ -48,6 +49,8 @@ def score_against_jd(jd: str, profile: dict) -> dict:
     Returns:
         dict: Scoring details including numeric score, decision, and reasons.
     """
+    # todo: Replace this with an llm call with structure output
+    # leave ATS score for now
     score = 0.8  # pretending computed
     reasons = "Good match for backend skills and years of experience"
     decision = "shortlist" if score >= 0.7 else "reject"
@@ -61,6 +64,11 @@ def score_against_jd(jd: str, profile: dict) -> dict:
 # ---------------------------------------------------
 # SCHEDULING TOOLS
 # ----------------------------------------------------
+
+# todo: lets research on any calender apis
+# google calender
+# outlook
+# zoom ...
 
 PANEL_SLOTS = {
     "backend_engineer": [

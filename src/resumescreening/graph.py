@@ -1,3 +1,16 @@
+"""End-to-end workflow for candidate screening, interviewing, and HR report generation.
+
+This module integrates:
+- Resume parsing and scoring using predefined tools.
+- Multi-round interview scheduling with routing logic.
+- Automated feedback + decision-making simulation.
+- HR-friendly report generation using an LLM.
+- A LangGraph-powered state machine to orchestrate all steps.
+
+The logic here coordinates various workflow nodes to move a candidate from
+resume screening → interview rounds → final HR report.
+"""
+
 import os
 
 from typing import Literal
@@ -22,8 +35,24 @@ model_provider = os.getenv('MODEL_PROVIDER')
 llm = init_chat_model(model=model_name, model_provider=model_provider)
 
 
+# ---------------------------------------------------
 # Node 1 - Screen Resumes
+# ---------------------------------------------------
 def screen_resumes_node(state: State) -> State:
+    """Processes resumes by parsing and scoring each candidate.
+
+    For every resume in the `state`, this node:
+    1. Parses the resume text.
+    2. Scores it against the job description.
+    3. Records the screening decision.
+
+    Args:
+        state (State): Current global workflow state containing resumes
+            and job description.
+
+    Returns:
+        State: Updated state with a new list of screening results.
+    """
     jd = state['job_description']
     results: list[ScreeningResult] = []
 
@@ -42,8 +71,21 @@ def screen_resumes_node(state: State) -> State:
     return state
 
 
-# Node 2 - Initialize interview state from shortlist
+# ---------------------------------------------------
+# Node 2 - Initialize Interview State
+# ---------------------------------------------------
 def init_interviews_node(state: State) -> State:
+    """Initializes interview metadata for all shortlisted candidates.
+
+    Any candidate marked as "shortlist" in screening results is added to the
+    interview pipeline with round number set to 0.
+
+    Args:
+        state (State): Workflow state containing screening results.
+
+    Returns:
+        State: Updated state with initialized interview entries.
+    """
     interviews: list[CandidateInterview] = []
 
     for screening_result in state["screening_results"]:
@@ -57,12 +99,36 @@ def init_interviews_node(state: State) -> State:
     state["interviews"] = interviews
     return state
 
-# Node 3: Router Node (decides next step)
+
+# ---------------------------------------------------
+# Node 3 - Router Node
+# ---------------------------------------------------
 def router_node(state: State) -> State:
+    """Acts as a pass-through node before conditional routing.
+
+    Args:
+        state (State): Current workflow state.
+
+    Returns:
+        State: Unmodified state.
+    """
     return state
 
 
 def route_next(state: State) -> Literal["schedule_round", "collect_feedback", "generate_hr_report"]:
+    """Decides the next step in the interview workflow.
+
+    Routing logic:
+    - If any candidate needs to be scheduled → schedule_round
+    - If any candidate is awaiting feedback → collect_feedback
+    - Otherwise → generate_hr_report
+
+    Args:
+        state (State): Current workflow state.
+
+    Returns:
+        Literal: Next node to execute.
+    """
     interviews = state.get("interviews", [])
 
     # Anyone waiting to be scheduled (first or next round)
@@ -81,11 +147,26 @@ def route_next(state: State) -> Literal["schedule_round", "collect_feedback", "g
     return "generate_hr_report"
 
 
-# Node 4 Schedule an interview
+# ---------------------------------------------------
+# Node 4 - Schedule Interview Round
+# ---------------------------------------------------
 def schedule_round_node(state: State) -> State:
+    """Schedules the next interview round for candidates needing a slot.
+
+    This node:
+    1. Fetches available panel slots.
+    2. Assigns one slot per eligible candidate.
+    3. Advances interview status to `waiting_feedback`.
+
+    Args:
+        state (State): Workflow state containing interview progress.
+
+    Returns:
+        State: Updated state with new scheduled slots.
+    """
     interviews = state["interviews"]
 
-    #todo: fix required to get the role
+    # todo: fix required to get the role
     slots = get_panel_availability("backend_engineer")
 
     for interview in interviews:
@@ -98,9 +179,9 @@ def schedule_round_node(state: State) -> State:
             continue
         
         chosen = slots.pop(0)
-        booking = book_slot(interview['candidate_id'],chosen)
+        booking = book_slot(interview['candidate_id'], chosen)
         if booking["status"] != "confirmed":
-            #todo: to be fixed
+            # todo: to be fixed
             continue
 
         interview["current_round"] += 1
@@ -115,17 +196,34 @@ def schedule_round_node(state: State) -> State:
     return state
 
 
-# Node 5 - collect feedback and decide next steps
+# ---------------------------------------------------
+# Node 5 - Collect Feedback
+# ---------------------------------------------------
 def collect_feedback_node(state: State) -> State:
+    """Collects feedback and determines candidate progression.
+
+    For each candidate waiting for feedback:
+    - Simulates interviewer comments.
+    - Decides next action: next round / reject / offer.
+    - Updates interview history and status.
+
+    Args:
+        state (State): Workflow state with candidate interview history.
+
+    Returns:
+        State: Updated state after applying feedback decisions.
+    """
     interviews = state["interviews"]
     for interview in interviews:
         if interview["status"] != "waiting_feedback":
             continue
+
         last_round = interview["history"][-1]
         round_no = last_round["round_number"]
 
         feedback = simulate_feedback(round_no)
         decision = decide_next_step(feedback, round_no)
+
         last_round["feedback"] = feedback
         last_round["decision"] = decision
 
@@ -139,9 +237,25 @@ def collect_feedback_node(state: State) -> State:
     state["interviews"] = interviews
     return state
 
-# Node 6 - Generate HR friendly report (LLM Summary)
 
+# ---------------------------------------------------
+# Node 6 - HR Report Generation (LLM)
+# ---------------------------------------------------
 def generate_hr_report_node(state: State) -> State:
+    """Generates a human-readable HR summary using an LLM.
+
+    The report covers:
+    - Pipeline summary
+    - Shortlisted candidates & interview journey
+    - Rejections + reasons
+    - Offer recommendations
+
+    Args:
+        state (State): Workflow state with screening & interview lifecycle.
+
+    Returns:
+        State: Updated state with `hr_report` filled in.
+    """
     interviews = state["interviews"]
     screening_results = state['screening_results']
     prompt = f"""
@@ -160,7 +274,7 @@ Interview Lifecycle:
 
 The report should include
 1. Overall pipeline summary
-2. Shortlisted candidates and  their interview rounds
+2. Shortlisted candidates and their interview rounds
 3. Rejected Candidates and main reasons.
 4. Candidates for whom an offer is recommnded
 
@@ -171,7 +285,21 @@ Use bullet points and Short paragraphs.
     return state
 
 
+# ---------------------------------------------------
+# Graph Builder
+# ---------------------------------------------------
 def build_graph():
+    """Builds and compiles the full LangGraph workflow.
+
+    The graph consists of:
+    - Linear first steps (screen → init → router)
+    - Conditional routing based on interview progress
+    - Loops to support multiple interview rounds
+    - Terminal HR report node
+
+    Returns:
+        Graph: A compiled LangGraph state machine ready for execution.
+    """
     builder = StateGraph(State)
 
     builder.add_node("screen_resumes", screen_resumes_node)
@@ -198,10 +326,9 @@ def build_graph():
         },
     )
 
-    #  Loops for multi-round flow
-    builder.add_edge("schedule_round","router")
-    builder.add_edge("collect_feedback","router")
+    # Loops for multi-round flow
+    builder.add_edge("schedule_round", "router")
+    builder.add_edge("collect_feedback", "router")
 
     builder.add_edge("generate_hr_report", END)
     return builder.compile()
-
