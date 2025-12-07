@@ -57,9 +57,12 @@ def init_interviews_node(state: State) -> State:
     state["interviews"] = interviews
     return state
 
-
 # Node 3: Router Node (decides next step)
-def router_node(state: State) -> Literal["schedule_round", "collect_feedback", "generate_hr_report"]:
+def router_node(state: State) -> State:
+    return state
+
+
+def route_next(state: State) -> Literal["schedule_round", "collect_feedback", "generate_hr_report"]:
     interviews = state.get("interviews", [])
 
     # Anyone waiting to be scheduled (first or next round)
@@ -187,7 +190,7 @@ def build_graph():
     # conditional edges from router
     builder.add_conditional_edges(
         "router",
-        router_node,
+        route_next,
         {
             "schedule_round": "schedule_round",
             "collect_feedback": "collect_feedback",
@@ -201,10 +204,4 @@ def build_graph():
 
     builder.add_edge("generate_hr_report", END)
     return builder.compile()
-
-
-
-
-
-
 
