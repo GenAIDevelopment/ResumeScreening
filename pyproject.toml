@@ -1,0 +1,23 @@
+[project]
+name = "resumescreening"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "shaikkhajaibrahim", email = "shaikkhajaibrahim@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "langchain>=1.1.2",
+    "langchain-core>=1.1.1",
+    "langchain-google-vertexai>=3.1.1",
+    "langgraph>=1.0.4",
+    "python-dotenv>=1.2.1",
+]
+
+[project.scripts]
+resumescreening = "resumescreening:main"
+
+[build-system]
+requires = ["uv_build>=0.9.3,<0.10.0"]
+build-backend = "uv_build"
